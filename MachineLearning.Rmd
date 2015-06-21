@@ -1,0 +1,126 @@
+---
+title: "MachineLearning"
+author: "Debaditya Chatterjee"
+date: "June 21, 2015"
+output: html_document
+---
+
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+###Data 
+
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment. 
+
+### Overview
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: 
+(Class A) - exactly according to the specification  
+(Class B) - throwing the elbows to the front 
+(Class C) - lifting the dumbbell only halfway 
+(Class D) - lowering the dumbbell only halfway 
+(Class E) - throwing the hips to the front 
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set.
+
+### Reading the Data
+We have set a seed at the beginning to ensure reproducibility of the outcome code. As a first step we will read the two datasets.
+
+```{r}
+set.seed(12345)
+setwd("~/Downloads")
+dftst <- read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!", ""))
+dftrn <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!", ""))
+```
+
+In order to apply various machine learning exercise we will need the following packages
+```{r}
+library(caret)
+library(rattle)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+```
+
+### Exploring the training data
+As the first step we will take a quick look at the training dataset.
+```{r}
+dim(dftrn)
+```
+In order to keep the length of the report reasonable we execute other exploratory commands but we do not print the output. 
+```{r results='hide'}
+summary(dftrn)
+str(dftrn)
+```
+
+We also look at the distribution of the classe variable in the training data set. 
+```{r}
+plot(dftrn$classe, xlab="Classe", ylab="Frequency", col="grey")
+```
+
+We see the data has a small skew with most "A" type records followed by "E".
+On inspection of the raw data we also see there are many columns with values NA. We will remove these columns from our analysis to ensure there is unnecessary noise. The next step would be to remove the variables with low variability. We will also drop some of the unnecessary user data specific variables from the dataset.
+```{r}
+dftrn <- dftrn[,colSums(is.na(dftrn)) == 0]
+nz <- nearZeroVar(dftrn, saveMetrics = TRUE)
+dftrn <- dftrn[, !nz$nzv]
+dftrn <- dftrn[,-(1:6)]
+```
+Now let us look at the new cleaned up dataframe.
+```{r}
+dim(dftrn)
+```
+### Cross Validation
+In order to cross validate our model we will split our training data set into two subsets. One for the generating the model and other to test the model. Once the most accurate model is determined we will apply this to the actual test dataset.
+```{r}
+inTrain <- createDataPartition(dftrn$classe, p=0.75, list=FALSE)
+dftrntrain <- dftrn[inTrain,]
+dftrntest <- dftrn[-inTrain,]
+dim(dftrntrain)
+dim(dftrntest)
+```
+### Out of sample error
+We will use the model accuracy in the cross validation data.Accuracy is determined by the total number of correct predictions against the test dataset genrated from the original datset. Out of sample error is 1 minus accuracy i.e the expected number of misclassified data.
+
+### Model 1 - Classification Tree
+```{r}
+model1 <- train(classe ~., method="rpart", data=dftrntrain)
+fancyRpartPlot(model1$finalModel)
+```
+#### Applying the Model
+Now we apply the generated model on the same training dataset and check the accuracy.
+
+```{r}
+prediction1 <- predict(model1, dftrntrain)
+confusionMatrix(prediction1, dftrntrain$classe)
+```
+We find this to be not very accurate. Let us apply the same model to our test data set generated from the original training set.
+```{r}
+prediction2 <- predict(model1, dftrntest)
+confusionMatrix(prediction2, dftrntest$classe)
+```
+This model has an accuracy of only about 55%. We should look at another better model.
+
+### Model 2: Random Forest
+We will generate another model using the Random Forest machine learning algorithm and then validate the test set (generated from our training set).
+
+```{r}
+model2 <- randomForest(classe ~. , data=dftrntrain, method=class)
+prediction3 <- predict(model2, dftrntest)
+confusionMatrix(prediction3, dftrntest$classe)
+```
+
+We can see this model has very high accuracy (over 99%) and hence very little out of sample errors. Hence we will use the random forest model and apply this to our original test dataset. 
+```{r}
+Final <- predict(model2, dftst)
+Final
+```
